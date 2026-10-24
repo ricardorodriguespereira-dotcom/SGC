@@ -1,7 +1,7 @@
 {
- "name": "Pendências SE",
- "short_name": "Pendências",
- "description": "Pendências, testes, relatórios de ensaio e obra de subestações.",
+ "name": "SGC — Sistema de Gestão dos Comissionamentos",
+ "short_name": "SGC",
+ "description": "Gestão dos comissionamentos de subestações: pendências, ensaios, testes de proteção, supervisão, SI/PEX, energização, As-Built e O&M.",
  "lang": "pt-BR",
  "start_url": "./",
  "scope": "./",

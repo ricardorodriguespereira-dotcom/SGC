@@ -404,7 +404,7 @@ a.btn{text-decoration:none;color:inherit}
 .sem-d{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-disp);font-weight:600;font-size:13px;letter-spacing:.04em;white-space:nowrap}
 .sem-d i{width:13px;height:13px;border-radius:50%;background:var(--c);box-shadow:0 0 0 2px color-mix(in srgb,var(--c) 25%,transparent)}
 .form label.chk{flex-direction:row;align-items:flex-start;gap:10px;font-size:14px;font-weight:500;color:var(--ink);letter-spacing:0}.req-terms{display:flex;flex-wrap:wrap;gap:4px 22px}.req-terms .chk{border:0}
-.req-sel{display:grid}.req-sel .chk{align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line)}.req-sel .chk input{margin-top:3px}
+.req-sel{display:grid}.req-l{display:flex;align-items:flex-start;gap:8px;border-bottom:1px solid var(--line)}.req-l .chk{flex:1;border:0}.req-ac{flex:none;padding-top:8px;font-size:13px;white-space:nowrap}.req-sel .chk{align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line)}.req-sel .chk input{margin-top:3px}
 .req-r{display:grid;grid-template-columns:14px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
 .req-c{width:12px;height:12px;border-radius:50%;background:var(--c)}.req-t{display:flex;flex-direction:column;gap:2px;min-width:0}.req-t .linkb{align-self:flex-start;font-size:13px}
 .en-n{width:72px;border:1px solid var(--line);border-radius:6px;padding:5px 6px;font:inherit;background:var(--surface);color:var(--ink)}
@@ -2377,7 +2377,14 @@ function enProg(se,lk,et){
 function enSeq(se,lk){const s=enSup(se,lk),e=(s&&s.et)||{},feito=k=>['ok','ress'].includes((e[k]||{}).st);const av=[];
   if((feito('cot')||feito('ons'))&&!feito('n2'))av.push('COT ou ONS antes do N2');if(feito('ons')&&!feito('cot'))av.push('ONS antes do COT');return av}
 /* ---------- semáforo ---------- */
-function enFTs(se){return typeof ftsDe==='function'?ftsDe(se):[]}
+/* FTs monitoradas: as do unifilar menos as desligadas pelo administrador, mais as incluídas à mão (config/app → sem[se]) */
+const enSemCfg=se=>((cfgApp().sem||{})[se&&se.id]||{});
+function enFTsAll(se){const base=typeof ftsDe==='function'?ftsDe(se):[];return [...base,...(enSemCfg(se).ftExtra||[]).map(f=>({...f,extra:true}))]}
+function enFTs(se){const off=enSemCfg(se).ftOff||[];return enFTsAll(se).filter(f=>!off.includes(f.lk))}
+/* requisitos valendo numa FT: o padrão geral, menos os desligados nesta FT, mais os ligados só nesta FT */
+function enReqsFT(se,ft){const o=(enSemCfg(se).reqFt||{})[ft.lk]||{},gOff=cfgApp().reqOff||[],on=o.on||[],off=o.off||[];
+  return enReqsAll().filter(r=>enTermoDe(r)&&(on.includes(r.k)||(!gOff.includes(r.k)&&!off.includes(r.k))))}
+const enFtMod=ft=>((enSemCfg(effSE()).reqFt||{})[ft.lk]);
 function enAuto(se,ft,k){
   const lk=ft.lk,ts=S.tests.filter(t=>t.se===se.id);
   if(k==='ens'){if(!/\|\*$/.test(lk))return {c:'na',x:'Não se aplica a esta FT'};const eq=atLoc(ts,se.id,lk).filter(t=>!(t.form&&/^ft/.test(t.form.modelo||'')));
@@ -2405,7 +2412,7 @@ function enItem(se,ft,r){
   const rq=enReq(se.id,r.esc==='se'?'_se':ft.lk),it=rq&&rq.it&&rq.it[r.k];
   if(!it||!it.st)return {c:'r',x:'Pendente'};return {c:it.st==='ok'?'g':it.st==='na'?'na':'y',x:it.st==='na'?'Não se aplica':`${it.data?fmtISO(it.data)+' · ':''}${esc(nameOf(it.por))}${it.anexo?' · com anexo':''}`};
 }
-function enSem(se,ft){const rs=enReqs(),out={};
+function enSem(se,ft){const rs=enReqsFT(se,ft),out={};
   enTermos().forEach(t=>{const i=TERMOS.indexOf(t),its=rs.filter(r=>TERMOS.indexOf(r.t)<=i).map(r=>({r,...enItem(se,ft,r)}));const v=its.filter(x=>x.c!=='na');
     out[t]={c:v.some(x=>x.c==='r')?'r':v.some(x=>x.c==='y')?'y':'g',its,falta:v.filter(x=>x.c!=='g').length}});return out}
 const SEMC={g:'var(--ok)',y:'var(--andamento)',r:'var(--alta)',na:'var(--line)'};
@@ -2420,7 +2427,7 @@ function renderEnerg(m){
   let corpo='';
   if(aba==='semaforo')corpo=`<p class="hint">Semáforo cumulativo pelo Anexo C do Submódulo 7.15: cada termo exige também os itens dos anteriores (o TLR segue os do TLP). Toque na FT para ver o que falta e gerar a Declaração de Conformidade.</p>
     <div class="pcards">${sem.map(({ft,s})=>`<button class="pcard nt" data-act="en-ft" data-lk="${esc(ft.lk)}"><span style="min-width:0"><span class="pt">${esc(ft.nome)}</span><span class="crumb">${esc(ensNome(ft.m))}${s[T0].falta?` · ${s[T0].falta} item(ns) para o ${T0}`:' · pronta para o '+T0}</span></span><span class="sem-r">${enTermos().map(t=>semDot(s[t].c,t)).join('')}</span></button>`).join('')||'<p class="muted">Cadastre os vãos no unifilar para ver as FTs.</p>'}</div>
-    ${R.owner()?`<div class="actions"><button class="btn sm" data-act="en-reqcfg">Requisitos do semáforo</button><button class="btn sm" data-act="en-papeis">Quem cadastra SI e aprova PEX</button></div>`:''}`;
+    ${R.owner()?`<div class="actions"><button class="btn sm" data-act="en-ftcfg">FTs monitoradas</button><button class="btn sm" data-act="en-reqcfg">Requisitos do semáforo</button><button class="btn sm" data-act="en-papeis">Quem cadastra SI e aprova PEX</button></div>`:''}`;
   else if(aba==='si'){const f=EN.sif,l=sis.filter(x=>f==='todas'||(f==='abertas'?!['executada','cancelada','reprovada'].includes(x.status):x.status===f));
     corpo=`<div class="oem-bar">${R.canAct()?`<button class="btn primary" data-act="en-sinova">Solicitar cadastro de SI</button>`:''}<select id="enSif" class="sel" aria-label="Situação"><option value="abertas">Em aberto</option><option value="todas">Todas</option>${Object.entries(SIST).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></div>
     <div class="pcards">${l.map(x=>`<button class="pcard nt" data-act="en-si" data-id="${esc(x.id)}"><span style="min-width:0"><span class="pt">SIAE ${esc(x.num)}${x.sgi?` · SGI ${esc(x.sgi)}`:''}</span><span class="crumb">${esc((x.desc||'').slice(0,90))}</span><span class="crumb">${enDH(x.ini)} a ${enDH(x.fim)} · ${esc(x.eqp||'')}${x.pex?' · '+esc((enDocs().find(p=>p.id===x.pex)||{}).num||'PEX'):''}</span></span>${enChipSI(x.status)}</button>`).join('')||'<p class="muted">Nenhuma SI neste filtro.</p>'}</div>`.replace(`value="${f}"`,`value="${f}" selected`)}
@@ -2439,7 +2446,7 @@ function renderEnerg(m){
 const enChipSI=s=>`<span class="chip ${['aprovada','executada'].includes(s)?'s-aprovado':['reprovada','cancelada'].includes(s)?'s-reprovado':s==='cadastrada'?'s-validacao':'s-aguardando'}">${SIST[s]||s}</span>`;
 const enChipPX=s=>`<span class="chip ${['aprovada','executada'].includes(s)?'s-aprovado':s==='devolvida'?'s-reprovado':s==='cancelada'?'tipo':'s-aguardando'}">${PXST[s]||s}</span>`;
 /* agenda: etapas de supervisão previstas + períodos das SIs */
-function enAgenda(se){const out=[];const fts=enFTs(se);
+function enAgenda(se){const out=[];const fts=enSupAlvos(se);
   fts.forEach(ft=>{const s=enSup(se.id,ft.lk);if(!s)return;ETS.forEach(([k,l])=>{const e=s.et[k]||{};if(e.prev)out.push({d:String(e.prev).slice(0,10),h:String(e.prev).slice(11,16),t:`Supervisão ${l} — ${ft.nome}`,st:SUPST[e.st||''],ok:['ok','ress'].includes(e.st),lk:ft.lk,k:'sup',et:k,extra:e.prot?`Agendamento ${e.prot}`:''})})});
   enSIs(se.id).filter(x=>x.ini&&!['cancelada','reprovada'].includes(x.status)).forEach(x=>out.push({d:String(x.ini).slice(0,10),h:String(x.ini).slice(11,16),fim:x.fim,t:`SIAE ${x.num} — ${(x.desc||'').slice(0,60)}`,st:SIST[x.status],ok:x.status==='executada',id:x.id,k:'si'}));
   return out.sort((a,b)=>(a.d+a.h).localeCompare(b.d+b.h))}
@@ -2457,8 +2464,8 @@ function enFTHTML(lk){
   const rq=enReq(se.id,lk),b=(rq&&rq.bdprot)||{};
   return `<div class="crumb">${esc(se.sigla||se.nome)} · ${esc(ensNome(ft.m))}</div><div class="sem-r big">${enTermos().map(t=>semDot(s[t].c,t+(s[t].falta?` · falta ${s[t].falta}`:' · OK'))).join('')}</div>
     <p class="hint" style="margin:6px 0 0">Requisitos do Anexo C do Submódulo 7.15 (rev. 2025.08) e controles internos. TLR: mesmos requisitos do TLP, quando há pendência impeditiva de terceiros ou de caráter sistêmico, com o Relatório Comprobatório (Anexo B).${ft.m==='ftldit'?' Reforço ou melhoria fora da Rede Básica dispensa o TLT, salvo exceção do ONS (7.15 §1.2.1.5).':''}</p>
-    ${pode&&S.dl?`<div class="actions"><button class="btn sm" data-act="en-decl" data-lk="${esc(lk)}">Declaração de Conformidade (Anexo A)</button></div>`:''}
-    ${enTermos().map((t,i,A)=>{const its=enReqs().filter(r=>enTermoDe(r)===t);return `<div class="sec-t">Requisitos ${t}${i?` (além dos do ${A[i-1]})`:''}</div>${its.map(r=>{const v=enItem(se,ft,r),man=!r.auto;
+    <div class="actions">${pode&&S.dl?`<button class="btn sm" data-act="en-decl" data-lk="${esc(lk)}">Declaração de Conformidade (Anexo A)</button>`:''}${R.owner()?`<button class="btn sm" data-act="en-reqft" data-lk="${esc(lk)}">Requisitos desta FT${enFtMod(ft)&&((enFtMod(ft).on||[]).length||(enFtMod(ft).off||[]).length)?' (personalizados)':''}</button>`:''}</div>
+    ${enTermos().map((t,i,A)=>{const its=enReqsFT(se,ft).filter(r=>enTermoDe(r)===t);return `<div class="sec-t">Requisitos ${t}${i?` (além dos do ${A[i-1]})`:''}</div>${its.map(r=>{const v=enItem(se,ft,r),man=!r.auto;
       return `<div class="req-r"><span class="req-c" style="--c:${SEMC[v.c]}"></span><div class="req-t"><b>${esc(r.l)}</b><span class="crumb">${v.x||''}${r.ref?` · ref. ${esc(r.ref)}`:''}${r.esc==='se'?' · vale para a SE inteira':''}${r.cd?` · <i>${esc(r.cd)}</i>`:''}</span>${r.auto==='bdprot'&&pode?`<button class="linkb" data-act="en-bdprot" data-lk="${esc(lk)}">${b.data?'Atualizar registro no BDProt':'Registrar no BDProt'}</button>`:''}${r.auto&&['n2','cot','ons'].includes(r.auto)?`<button class="linkb" data-act="en-sup" data-lk="${esc(lk)}">Abrir supervisão</button>`:''}</div>
         ${man&&pode?`<span class="sp-rb">${[['ok','OK'],['na','NA']].map(([k,l])=>`<button type="button" class="sp-b${((((rq&&r.esc!=='se')?rq:enReq(se.id,r.esc==='se'?'_se':lk))||{}).it||{})[r.k]?.st===k?' on v-OK':''}" data-act="en-req" data-lk="${esc(lk)}" data-k="${esc(r.k)}" data-se="${r.esc==='se'?1:''}" data-v="${k}">${l}</button>`).join('')}</span>`:''}</div>`}).join('')}`}).join('')}`;
 }
@@ -2479,7 +2486,7 @@ function openBDProt(lk){
 async function enArquivo(f,pasta){if(!f||!S.assets)return null;const pdf=f.type==='application/pdf'||/\.pdf$/i.test(f.name);const b=pdf?f:await compress(f,2000,.82);const r=await S.assets.upload(b,upOpts(pdf?'application/pdf':'image/jpeg',pasta));return {id:r.id,nome:f.name||'arquivo',tipo:pdf?'application/pdf':'image/jpeg'}}
 const enPasta=(se,...p)=>[abLimpa(se.nome+(se.sigla?' ('+se.sigla+')':'')),'Energização',...p.map(abLimpa)];
 /* ---------- supervisão da FT ---------- */
-function openEnSup(lk){EN.ptn=120;pushSheet({live:true,enlk:lk,title:()=>{const se=effSE(),ft=se&&enFTs(se).find(f=>f.lk===lk);return 'Supervisão · '+(ft?ft.nome:'')},render:()=>enSupHTML(lk)})}
+function openEnSup(lk){EN.ptn=120;pushSheet({live:true,enlk:lk,title:()=>{const se=effSE(),ft=se&&enSupAlvos(se).find(f=>f.lk===lk);return 'Supervisão · '+(ft?ft.nome:'')},render:()=>enSupHTML(lk)})}
 function enSupHTML(lk){
   const se=effSE(),s=enSup(se.id,lk)||enSupNovo(se.id,lk),pode=R.canAct(),sq=enSeq(se.id,lk),pts=enPontos(se.id,lk);
   let h=sq.length?`<div class="box valb"><b>Fora da sequência recomendada:</b> ${esc(sq.join('; '))}. Registre o motivo na etapa.</div>`:'';
@@ -2520,14 +2527,15 @@ async function enLerXlsxTodas(file){
     out.push({nome:sh.getAttribute('name'),rows})}
   return out;
 }
-const PT_F=[['tag','Tag / ID do ponto',[/^id$/,/^tag$/,/^nome$/,/^ponto$/,/identifica/,/^c[oó]digo$/]],['desc','Descrição',[/^descri[cç][aã]o$/,/^descri/,/^texto/]],
-  ['eq','Equipamento',[/^equipamento$/]],['cot','Vai p/ COT',[/vai p\/? ?cot|^cot$/]],['ons','Uso ONS',[/^uso ons$|ons/]]];
+const PT_F=[['tag','Tag / ID do ponto',[/^id$/,/^tag$/,/^nome$/,/^ponto$/,/identifica/,/^c[oó]digo$/,/^endere/,/^ioa$/]],['end','Endereço',[/^endere/,/^ioa$/,/^address/,/^indice$/,/^index$/,/^registro$/]],['desc','Descrição',[/^descri[cç][aã]o$/,/^descri/,/^texto/]],
+  ['eq','Equipamento',[/^equipamento$/]],['vao','Vão / FT (lista da SE)',[/^v[aã]o$/,/^bay$/,/^ft$/,/^fun[cç][aã]o( de)? transmiss/,/^m[oó]dulo/,/^instala[cç][aã]o$/,/^elemento/,/^conjunto/,/^localiza/,/^painel$/,/^c[oó]digo operacional/]],['cot','Vai p/ COT',[/vai p\/? ?cot|^cot$/]],['ons','Uso ONS',[/^uso ons$|ons/]]];
 const enHdr=h=>abNorm(h).replace(/\s+/g,' ').trim();
-function enHeader(rows){let hi=-1,best=0;rows.slice(0,15).forEach((r,i)=>{const hs=r.map(enHdr),sc=(PT_F[0][2].some(re=>hs.some(h=>re.test(h)))?1:0)+(PT_F[1][2].some(re=>hs.some(h=>re.test(h)))?1:0);if(sc>best){best=sc;hi=i}});return best>=2?hi:-1}
+function enHeader(rows){let hi=-1,best=0;rows.slice(0,15).forEach((r,i)=>{const hs=r.map(enHdr),F=k=>PT_F.find(x=>x[0]===k)[2],sc=(F('tag').some(re=>hs.some(h=>re.test(h)))?1:0)+(F('desc').some(re=>hs.some(h=>re.test(h)))?1:0);if(sc>best){best=sc;hi=i}});return best>=2?hi:-1}
 function enAchaCol(hs,res){for(const re of res){const i=hs.findIndex(h=>re.test(h));if(i>=0)return i}return -1}
-function enTipoLinha(get){const ent=abNorm(get(/^entidade$/)||get(/^ref/)||''),cat=abNorm(get(/^categoria/)),ts=abNorm(get(/^tipo sage$|^tipo$/));
-  if(/^pas/.test(ent)||/medi/.test(cat)||/^(amp|kv|mw|mvar|mva|freq|ang_fase|tmp|anal)/.test(ts))return 'an';if(/^cgs/.test(ent)||/coman/.test(cat)||/coman/.test(ts))return 'co';return 'di'}
-function openEnPtImp(lk){EN.imp={lk,abas:null};pushSheet({live:true,title:'Lista de pontos',render:enPtImpHTML})}
+function enTipoLinha(get){const ent=abNorm(get(/^entidade$/)||get(/^ref/)||''),cat=abNorm(get(/^categoria/)),ts=abNorm(get(/^tipo sage$|^tipo$/)),tp=abNorm(get(/^tipo (do|de) (ponto|sinal|dado)|^type$|^classe|^natureza|^sinal$|^tipo ponto/));
+  const an=v=>/^(an|ai\b|ai[ _-]|me\b|mv\b|m_me|medi|pas|amp|kv|mw|mvar|mva|freq|ang_fase|ang|tmp|temp|anal|float|real|medida|grandeza)/.test(v),co=v=>/^(co\b|cmd|coman|controle|saida|do\b|bo\b|ao\b|sc\b|dc\b|rc\b|c_|cgs|cr\b|ctrl|setpoint|ao_cmd)/.test(v);
+  if(/^pas/.test(ent)||/medi/.test(cat)||an(ts)||an(tp))return 'an';if(/^cgs/.test(ent)||/coman/.test(cat)||co(ts)||co(tp)||/coman/.test(ts))return 'co';return 'di'}
+function openEnPtImp(lk){EN.imp={lk,abas:null};pushSheet({live:true,title:lk==='*'?'Lista de pontos da SE':'Lista de pontos',render:enPtImpHTML})}
 function enPtCarrega(abas){const err=$('#enErr');
   const ok=abas.map(a=>({...a,hi:enHeader(a.rows)})).filter(a=>a.hi>=0);
   if(!ok.length){if(abas.length===1&&abas[0].rows.length){ok.push({...abas[0],hi:-1})}else{if(err)err.textContent='Não encontrei as colunas de tag e descrição.';return}}
@@ -2535,18 +2543,39 @@ function enPtCarrega(abas){const err=$('#enErr');
   PT_F.forEach(([k,,res])=>{map[k]=null;for(const re of res){const h=hs.find(x=>re.test(x));if(h){map[k]=h;break}}});
   if(!ok.some(a=>a.hi>=0)){map.tag='#0';map.desc='#1'}
   EN.imp={...EN.imp,abas:ok,hs,map};refreshLiveSheet()}
-function enPtItens(){const I=EN.imp,m=I.map,out=[],seen=new Set();let temCot=false,temOns=false;
+function enPtLinhas(){const I=EN.imp,m=I.map,out=[];let temCot=false,temOns=false;
   I.abas.forEach(a=>{const hs=a.hi>=0?a.rows[a.hi].map(enHdr):[],ix=k=>{const v=m[k];if(!v)return -1;if(v[0]==='#')return +v.slice(1);return hs.indexOf(v)};
-    const it={tag:ix('tag'),desc:ix('desc'),eq:ix('eq'),cot:ix('cot'),ons:ix('ons')};if(it.cot>=0)temCot=true;if(it.ons>=0)temOns=true;
+    const it={tag:ix('tag'),desc:ix('desc'),eq:ix('eq'),cot:ix('cot'),ons:ix('ons'),vao:ix('vao'),end:ix('end')};if(it.cot>=0)temCot=true;if(it.ons>=0)temOns=true;
     a.rows.slice(a.hi+1).forEach(r=>{const g=i=>i>=0?String(r[i]??'').trim():'';let tag=g(it.tag);if(!tag)return;const eq=g(it.eq);if(eq&&!tag.includes(eq)&&!m.tag.startsWith('id')&&m.tag!=='nome')tag=eq+' '+tag;
-      if(seen.has(tag))return;seen.add(tag);const get=re=>{const i=hs.findIndex(h=>re.test(h));return i>=0?String(r[i]??''):''};
+      const get=re=>{const i=hs.findIndex(h=>re.test(h));return i>=0?String(r[i]??''):''};
       const fl=(it.cot<0||/^(s|sim|x|parcial)/i.test(g(it.cot))?'c':'')+(it.ons<0||/^(s|sim|x)/i.test(g(it.ons))?'o':'');
-      out.push([tag.slice(0,48),[eq&&!tag.startsWith(eq)?eq:'',g(it.desc)].filter(Boolean).join(' · ').slice(0,90),enTipoLinha(get),fl])})});
+      const en=it.end>=0&&it.end!==it.tag?g(it.end):'';
+      out.push({p:[tag.slice(0,48),[en?'End. '+en:'',eq&&!tag.startsWith(eq)?eq:'',g(it.desc)].filter(Boolean).join(' · ').slice(0,90),enTipoLinha(get),fl],vao:g(it.vao),eq,aba:a.nome,ctx:[g(it.vao),g(it.tag),get(/^texto do nome$|^nome sage$|^id sage$/),get(/^ocr$/)].join(' '),desc:g(it.desc)})})});
   I.temCot=temCot;I.temOns=temOns;return out}
+function enPtItens(){const seen=new Set();return enPtLinhas().filter(l=>{if(seen.has(l.p[0]))return false;seen.add(l.p[0]);return true}).map(l=>l.p)}
+/* lista da SE inteira: separa os pontos por FT, serviços auxiliares e pontos gerais */
+const EN_GRP=[{lk:'grp|sa',nome:'Serviços auxiliares',m:'grp'},{lk:'grp|ger',nome:'Pontos gerais da SE',m:'grp'}];
+const enSupAlvos=se=>[...enFTs(se),...EN_GRP];
+const enCompacto=t=>abNorm(t).replace(/[^a-z0-9]/g,'');
+function enChavesFT(se){return enFTs(se).map(ft=>{const ks=new Set(),nm=enCompacto(ft.nome);if(nm.length>=4)ks.add(nm);
+  abNorm(ft.nome).split(/[^a-z0-9-]+/).map(x=>x.replace(/-/g,'')).filter(x=>x.length>=3&&/\d/.test(x)&&/[a-z]/.test(x)).forEach(x=>ks.add(x));
+  const vid=ft.lk.split('|')[0];Object.entries(se.tags||{}).forEach(([k,v])=>{if(k.startsWith(vid+'~')&&v){const c=enCompacto(v);if(c.length>=3)ks.add(c)}});
+  return {ft,ks:[...ks]}})}
+const EN_SA_RE=/(^|[^a-z])(sa|saux|servicos? auxiliares?|serv\.? aux|retificador(es)?|ret|bateria|bat|gmg|grupo gerador|gerador|qdca|qdcc|qgbt|tsa|carregador|nobreak|no-break|ups|vcc|vca)([^a-z]|$)/;
+function enAchaFT(chs,txt){const n=abNorm(txt),toks=new Set(n.split(/[^a-z0-9]+/).filter(Boolean)),c=enCompacto(txt);let best=null,bl=0;
+  chs.forEach(({ft,ks})=>ks.forEach(k=>{if((toks.has(k)||(k.length>=5&&c.includes(k)))&&k.length>bl){best=ft;bl=k.length}}));return best}
+function enPtGrupos(se){const chs=enChavesFT(se),gs={};
+  enPtLinhas().forEach(l=>{let key,label,sug;
+    if(l.vao){key='v:'+l.vao;label=l.vao}else{const ft=enAchaFT(chs,l.ctx);if(ft){key='f:'+ft.lk;label=ft.nome}else if(EN_SA_RE.test(abNorm(l.ctx+' '+l.eq+' '+l.desc))){key='s:sa';label='Serviços auxiliares (identificados pela descrição)'}else{key='e:'+(l.eq||l.aba);label=(l.eq||l.aba)+(l.eq&&l.aba&&l.aba!==l.eq?' ('+l.aba+')':'')}}
+    const g=gs[key]||(gs[key]={key,label,n:0,linhas:[]});g.n++;g.linhas.push(l)});
+  Object.values(gs).forEach(g=>{const ft=g.key.startsWith('f:')?enFTs(se).find(f=>'f:'+f.lk===g.key):enAchaFT(chs,g.label+' '+g.linhas.slice(0,3).map(l=>l.ctx).join(' '));
+    const txt=abNorm(g.label+' '+g.linhas.slice(0,5).map(l=>l.eq+' '+l.aba+' '+l.desc).join(' '));g.sug=ft?ft.lk:EN_SA_RE.test(abNorm(g.label))||EN_SA_RE.test(txt)?'grp|sa':'grp|ger'});
+  return Object.values(gs).sort((a,b)=>a.label.localeCompare(b.label,'pt',{numeric:true}))}
 function enPtImpHTML(){const I=EN.imp;if(!I)return '';
   if(!I.abas)return `<p class="hint">Use a lista de pontos exportada pelo programa (uma aba por equipamento) ou qualquer planilha com o tag e a descrição dos pontos. O tipo (analógico, digital ou comando) vem da entidade (PAS, PDS, CGS) ou da categoria; as colunas "Vai p/ COT" e "Uso ONS" definem quais pontos entram em cada etapa.</p>
     <div class="pick"><label for="enPtArq"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg>Escolher arquivo (.xlsx ou .csv)<input type="file" id="enPtArq" accept=".xlsx,.csv,.txt"></label></div>
     <label class="fld">Ou cole as linhas<textarea id="enPtCola" rows="5" style="border:1px solid var(--line);border-radius:8px;padding:9px;font-family:var(--f-mono);font-size:12px;background:var(--surface);color:var(--ink)"></textarea></label><div class="actions"><button class="btn" data-act="en-ptcola">Ler o texto colado</button></div><p class="ferr" id="enErr"></p>`;
+  if(I.lk==='*')return enPtImpSEHTML();
   const its=enPtItens(),cont={an:0,di:0,co:0};its.forEach(x=>cont[x[2]]++);const nc=its.filter(x=>x[3].includes('c')).length,no=its.filter(x=>x[3].includes('o')).length;
   const opts=k=>`<option value="">— não usar —</option>${I.hs.map(h=>`<option value="${esc(h)}"${I.map[k]===h?' selected':''}>${esc(h)}</option>`).join('')}`;
   return `<p class="hint">${esc(I.nome||'')} · ${I.abas.length} aba(s) com pontos.</p>
@@ -2555,6 +2584,26 @@ function enPtImpHTML(){const I=EN.imp;if(!I)return '';
     <div class="tscroll"><table class="olds"><thead><tr><th>Tag</th><th>Descrição</th><th>Tipo</th><th>COT</th><th>ONS</th></tr></thead><tbody>${its.slice(0,8).map(x=>`<tr><td class="mono">${esc(x[0])}</td><td>${esc(x[1])}</td><td>${x[2]}</td><td>${x[3].includes('c')?'sim':''}</td><td>${x[3].includes('o')?'sim':''}</td></tr>`).join('')}</tbody></table></div>
     <p class="hint">Trocar a lista zera as marcações por ponto das três etapas.</p><div class="actions"><button class="btn primary" data-act="en-ptgrava"${its.length?'':' disabled'}>Gravar lista</button></div><p class="ferr" id="enErr"></p>`;
 }
+function enPtImpSEHTML(){const I=EN.imp,se=effSE(),gs=enPtGrupos(se),al=enSupAlvos(se);I.dest=I.dest||{};
+  const dst=g=>I.dest[g.key]??g.sug,tot={};gs.forEach(g=>{const d=dst(g);if(d)tot[d]=(tot[d]||0)+g.n});
+  const opts=PT_F.length?`<div class="grid2">${PT_F.map(([k,l])=>`<label class="fld">${l}<select class="sel" data-enpt="${k}"><option value="">— não usar —</option>${I.hs.map(h=>`<option value="${esc(h)}"${I.map[k]===h?' selected':''}>${esc(h)}</option>`).join('')}</select></label>`).join('')}</div>`:'';
+  return `<p class="hint">${esc(I.nome||'')} · ${enPtLinhas().length} pontos em ${gs.length} grupo(s). O app separa por FT pela coluna de vão/FT ou pelo código do vão e os tags do unifilar no identificador do ponto; o que não é de FT vai para serviços auxiliares ou pontos gerais. Confira o destino de cada grupo.</p>
+    ${opts}${I.map.vao?'':'<div class="box valb">A lista não tem coluna de vão/FT: a separação usa os códigos do unifilar encontrados no identificador do ponto. Se a coluna tiver outro nome, escolha acima em "Vão / FT".</div>'}
+    <div class="tscroll"><table class="olds"><thead><tr><th>Grupo na lista</th><th>Pontos</th><th>An / Dig / Cmd</th><th>Vai para</th></tr></thead><tbody>${gs.map(g=>`<tr><td>${esc(g.label)}</td><td>${g.n}</td><td class="mono">${['an','di','co'].map(t=>g.linhas.filter(l=>l.p[2]===t).length).join(' / ')}</td><td><select class="sel" data-enptg="${esc(g.key)}"><option value="">Ignorar</option>${al.map(a=>`<option value="${esc(a.lk)}"${dst(g)===a.lk?' selected':''}>${esc(a.nome)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>
+    <p><b>Resultado</b> (analógicos / digitais / comandos):</p><ul style="margin:0;padding-left:18px">${Object.keys(tot).map(lk=>{const ls=gs.filter(g=>dst(g)===lk).flatMap(g=>g.linhas);return `<li>${esc((al.find(a=>a.lk===lk)||{}).nome||lk)}: ${ls.length} pontos — ${['an','di','co'].map(t=>ls.filter(l=>l.p[2]===t).length).join(' / ')}</li>`}).join('')||'<li>nada a gravar</li>'}</ul>
+    <p class="hint">Grava uma lista para cada destino. Só as FTs que receberem pontos têm a lista trocada (e as marcações por ponto zeradas); as outras continuam como estão.</p>
+    <div class="actions"><button class="btn primary" data-act="en-ptgravase"${Object.keys(tot).length?'':' disabled'}>Gravar listas</button></div><p class="ferr" id="enErr"></p>`}
+async function enPtGravaLk(se,lk,its,nome,lote){const old=enDocs().filter(d=>d.tipo==='pts'&&d.se===se.id&&d.lk===lk),chunks=[];let cur=[],tam=0;
+  its.forEach(p=>{const t=JSON.stringify(p).length;if(tam+t>28000&&cur.length){chunks.push(cur);cur=[];tam=0}cur.push(p);tam+=t});if(cur.length)chunks.push(cur);
+  for(let i=0;i<chunks.length;i++)await S.db.doc(`energ/PL.${se.id}.${enSlug(lk)}.${lote}.${i}`).set({tipo:'pts',se:se.id,lk,lote,n:i,itens:chunks[i]});
+  const cont={an:0,di:0,co:0};its.forEach(x=>cont[x[2]]++);const s=JSON.parse(JSON.stringify(enSup(se.id,lk)||enSupNovo(se.id,lk)));delete s.id;
+  ETS.forEach(([k])=>{s.et[k]=s.et[k]||{};s.et[k].fita=''});s.lista={lote,total:its.length,cont,cot:its.filter(x=>x[3].includes('c')).length,ons:its.filter(x=>x[3].includes('o')).length,nome:nome||'',em:lote,por:S.me?.id||null};
+  await S.db.doc('energ/S.'+se.id+'.'+enSlug(lk)).set(s);for(const d of old)await S.db.doc('energ/'+d.id).delete().catch(()=>{})}
+async function enPtGravaSE(b){const se=effSE(),I=EN.imp;if(!se||!I)return;const gs=enPtGrupos(se),por={};
+  gs.forEach(g=>{const d=I.dest[g.key]??g.sug;if(!d)return;const l=por[d]||(por[d]={its:[],seen:new Set()});g.linhas.forEach(x=>{let t=x.p[0];if(l.seen.has(t)){t=((x.vao||x.eq)+' '+t).slice(0,48);if(l.seen.has(t))return;x=({...x,p:[t,...x.p.slice(1)]})}l.seen.add(t);l.its.push(x.p)})});
+  const lks=Object.keys(por),lote=Date.now();b.disabled=true;
+  try{for(let i=0;i<lks.length;i++){b.textContent=`Gravando ${i+1} de ${lks.length}…`;await enPtGravaLk(se,lks[i],por[lks[i]].its,I.nome,lote)}
+    toast(`Listas gravadas em ${lks.length} destino(s)`);EN.imp=null;backSheet()}catch(e){const er=$('#enErr');if(er)er.textContent=errMsg(e);b.disabled=false;b.textContent='Gravar listas'}}
 async function enPtGrava(b){
   const se=effSE(),I=EN.imp;if(!se||!I)return;const lk=I.lk,its=enPtItens(),lote=Date.now(),old=enDocs().filter(d=>d.tipo==='pts'&&d.se===se.id&&d.lk===lk),chunks=[];let cur=[],tam=0;
   its.forEach(p=>{const t=JSON.stringify(p).length;if(tam+t>28000&&cur.length){chunks.push(cur);cur=[];tam=0}cur.push(p);tam+=t});if(cur.length)chunks.push(cur);b.disabled=true;
@@ -2723,7 +2772,8 @@ function renderSuperv(m){
     <p class="hint">Ordem recomendada: N2 → COT → ONS. O app não trava a sequência, mas marca quando ela é invertida e pede o motivo. Sem a lista de pontos, o controle é por tipo (analógicos, digitais e comandos); com a lista importada, ponto a ponto.</p>
     ${prox.length?`<div class="sec-t">Próximos testes</div>${enAgHTML(prox.slice(0,6))}`:''}
     <div class="sec-row"><div class="sec-t" style="margin:0">FTs</div><select id="enSvF" class="sel" aria-label="Filtro"><option value="">Todas (${fts.length})</option><option value="pend"${f==='pend'?' selected':''}>Com etapa pendente</option>${ETS.map(([k,l])=>`<option value="${k}"${f===k?' selected':''}>${l.split(' ')[0]} pendente</option>`).join('')}<option value="seq"${f==='seq'?' selected':''}>Fora de sequência (${seq.length})</option></select></div>
-    <div class="pcards">${vis.map(ft=>{const sq=enSeq(se.id,ft.lk);return `<button class="pcard nt" data-act="en-sup" data-lk="${esc(ft.lk)}"><span style="min-width:0"><span class="pt">${esc(ft.nome)}</span><span class="crumb">${ETS.map(([k,l])=>{const e=fe(ft)[k]||{},p=enProg(se.id,ft.lk,k);return `${l.split(' ')[0]}: ${SUPST[e.st||''].toLowerCase()}${p.tot?` ${p.pct}%`:''}`}).join(' · ')}</span>${sq.length?`<span class="crumb" style="color:var(--andamento)">Fora de sequência: ${esc(sq.join('; '))}</span>`:''}</span><span class="sem-r">${ETS.map(([k])=>{const a=enAuto(se,ft,k);return semDot(a.c,k.toUpperCase())}).join('')}</span></button>`}).join('')||(fts.length?'<p class="muted">Nenhuma FT com esse filtro.</p>':'<p class="muted">Cadastre os vãos no unifilar para ver as FTs.</p>')}</div></div>`;
+    ${R.approver()&&R.canAct()?`<div class="actions"><button class="btn sm" data-act="en-ptimpse">Importar lista de pontos da SE</button></div>`:''}
+    <div class="pcards">${[...vis,...(f&&f!=='pend'?[]:EN_GRP.filter(g=>!f||ETS.some(([k])=>!ok(g,k))))].map(ft=>{const sq=enSeq(se.id,ft.lk);return `<button class="pcard nt" data-act="en-sup" data-lk="${esc(ft.lk)}"><span style="min-width:0"><span class="pt">${esc(ft.nome)}</span><span class="crumb">${ETS.map(([k,l])=>{const e=fe(ft)[k]||{},p=enProg(se.id,ft.lk,k);return `${l.split(' ')[0]}: ${SUPST[e.st||''].toLowerCase()}${p.tot?` ${p.pct}%`:''}`}).join(' · ')}</span>${sq.length?`<span class="crumb" style="color:var(--andamento)">Fora de sequência: ${esc(sq.join('; '))}</span>`:''}</span><span class="sem-r">${ETS.map(([k])=>{const a=enAuto(se,ft,k);return semDot(a.c,k.toUpperCase())}).join('')}</span></button>`}).join('')||(fts.length?'<p class="muted">Nenhuma FT com esse filtro.</p>':'<p class="muted">Cadastre os vãos no unifilar para ver as FTs.</p>')}</div></div>`;
 }
 /* ---------- importação da lista de PEX (administrador) ---------- */
 function enPxFiltra(l,fts){const q=abNorm(EN.pxq||'').split(/\s+/).filter(Boolean);return l.filter(x=>{if(EN.pxf&&x.status!==EN.pxf)return false;if(!q.length)return true;
@@ -2832,26 +2882,49 @@ async function enICS(){const se=effSE();const l=enAgenda(se).filter(e=>e.d>=toda
   const ev=l.map((e,i)=>['BEGIN:VEVENT',`UID:${e.k}-${i}-${e.d}@app-se`,`DTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').slice(0,15)}Z`,e.h?`DTSTART:${dt(e.d,e.h)}`:`DTSTART;VALUE=DATE:${dt(e.d)}`,e.h?`DURATION:PT4H`:'',`SUMMARY:${z(e.t)}`,`DESCRIPTION:${z((se.sigla||se.nome)+' · '+e.st+(e.extra?' · '+e.extra:''))}`,'END:VEVENT'].filter(Boolean).join('\r\n'));
   const txt=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Neoenergia//App SE//PT',...ev,'END:VCALENDAR'].join('\r\n');
   try{await S.dl.save({filename:`agenda-${abLimpa(se.sigla||se.nome)}.ics`,data:new Blob([txt],{type:'text/calendar'})});toast('Agenda exportada')}catch(e){}}
-/* ---------- configuração (administrador) ---------- */
-function openEnReqCfg(){const c=cfgApp(),off=c.reqOff||[],toff=c.termOff||[];
-  pushSheet({title:'Requisitos do semáforo',render:()=>`<form class="form" data-form="en-reqsel"><p class="hint" style="margin:0">Escolha o que o app controla. Desmarcar um termo tira a coluna do semáforo; os requisitos dele passam para o termo seguinte que ficar marcado (o Anexo C é cumulativo). Desmarcar um requisito tira o item de todas as FTs; as marcações feitas continuam guardadas se ele voltar.</p>
-    <div class="sec-t" style="margin:0">Termos controlados</div><div class="req-terms">${TERMOS.map(t=>`<label class="chk"><input type="checkbox" name="term" value="${t}"${toff.includes(t)?'':' checked'}> <span>${t}</span></label>`).join('')}</div>
-    <div class="actions"><button class="btn sm" type="button" data-act="en-reqpre" data-v="com">Só os do comissionamento</button><button class="btn sm" type="button" data-act="en-reqpre" data-v="todos">Marcar todos</button><button class="btn sm" type="button" data-act="en-reqpre" data-v="nenhum">Desmarcar todos</button></div>
-    ${TERMOS.map(t=>{const l=enReqsAll().filter(r=>r.t===t);return l.length?`<div class="sec-t" style="margin:0">Requisitos ${t}</div><div class="req-sel">${l.map(r=>`<label class="chk"><input type="checkbox" name="on" value="${esc(r.k)}" data-t="${t}"${off.includes(r.k)?'':' checked'}> <span>${esc(r.l)}<span class="crumb"> · ${r.auto?'automático':'manual'}${r.ref?' · '+esc(r.ref):''}${r.cd?' · '+esc(r.cd):''}</span></span></label>`).join('')}</div>`:''}).join('')}
-    <label class="fld">Antecedência mínima para pedir SI (dias)<input name="ant" inputmode="numeric" value="${esc(c.siAntec||'')}"></label>
-    <p class="ferr" id="enErr"></p><div class="actions"><button class="btn primary" type="submit">Salvar</button><button class="btn" type="button" data-act="en-reqtxt">Editar textos / incluir requisitos</button></div></form>`})}
-async function enReqSelSalva(f){const fd=new FormData(f),on=fd.getAll('on'),tm=fd.getAll('term');
-  if(!tm.length){$('#enErr').textContent='Deixe ao menos um termo marcado.';return}
-  const reqOff=enReqsAll().map(r=>r.k).filter(k=>!on.includes(k)),termOff=TERMOS.filter(t=>!tm.includes(t));
-  try{await S.db.doc('config/app').set({...cfgApp(),reqOff,termOff,siAntec:+fd.get('ant')||0});toast(`Semáforo: ${on.length} requisito(s) em ${tm.join(', ')}`);backSheet()}catch(e){$('#enErr').textContent=errMsg(e)}}
-function enReqPreset(v){document.querySelectorAll('#sheetBody input[name=on]').forEach(x=>{x.checked=v==='todos'?true:v==='nenhum'?false:REQ_COMISS.includes(x.value)})}
-function openEnReqTxt(){pushSheet({title:'Textos dos requisitos',render:()=>`${cfgApp().reqs&&cfgApp().reqVer!==REQ_VER?'<div class="box valb">A lista salva é anterior ao Submódulo 7.15 rev. 2025.08. Toque em <b>Voltar ao padrão</b> para usar a lista nova.</div>':''}<p class="hint">Lista padrão do Anexo C do Submódulo 7.15, rev. 2025.08 (vigente desde 01/01/2026). Um requisito por linha, no formato <b>TERMO | texto (referência) | SE | condição</b>: SE quando vale para a subestação inteira; condição é o lembrete de aplicabilidade (deixe em branco se não houver). Os itens automáticos (ensaios, proteção, pré-operacional, BDProt, supervisão, SI, PEX e pendências) são calculados pelo app e não aparecem aqui.</p>
-  <form class="form" data-form="en-reqcfg"><textarea name="t" rows="16" style="border:1px solid var(--line);border-radius:8px;padding:9px;font-family:var(--f-mono);font-size:12px;background:var(--surface);color:var(--ink)">${esc(enReqsAll().filter(r=>!r.auto).map(r=>`${r.t} | ${r.l}${r.ref?' ('+r.ref+')':''}${r.esc==='se'?' | SE':(r.cd?' | ':'')}${r.cd?' | '+r.cd:''}`).join('\n'))}</textarea>
-  <div class="actions"><button class="btn primary" type="submit">Salvar</button><button class="btn" type="button" data-act="en-reqdef">Voltar ao padrão</button></div><p class="ferr" id="enErr"></p></form>`})}
-async function enReqCfgSalva(f){const fd=new FormData(f),autos=REQ_DEF.filter(r=>r.auto),man=[];
-  String(fd.get('t')||'').split('\n').map(x=>x.trim()).filter(Boolean).forEach((ln,i)=>{const p=ln.split('|').map(x=>x.trim());const t=TERMOS.includes((p[0]||'').toUpperCase())?p[0].toUpperCase():'TLT';const m=(p[1]||p[0]).match(/^(.*?)(?:\s*\(([^)]*)\))?$/);
-    const prev=REQ_DEF.find(r=>!r.auto&&r.l===m[1]);man.push({k:prev?prev.k:'m'+i+'_'+abNorm(m[1]).replace(/[^a-z0-9]/g,'').slice(0,12),l:m[1],t,ref:m[2]||'',esc:/^se$/i.test(p[2]||'')?'se':'',cd:p[3]||''})});
-  try{await S.db.doc('config/app').set({...cfgApp(),reqs:[...autos,...man],reqVer:REQ_VER});toast('Requisitos salvos');backSheet()}catch(e){$('#enErr').textContent=errMsg(e)}}
+/* ---------- configuração (administrador): cada marcação grava na hora ---------- */
+async function enCfgSet(patch,msg){try{await S.db.doc('config/app').set({...cfgApp(),...patch});if(msg)toast(msg);refreshLiveSheet()}catch(e){toast(errMsg(e))}}
+function enSemSet(se,fn,msg){const sem=JSON.parse(JSON.stringify(cfgApp().sem||{})),c=sem[se.id]||{};fn(c);sem[se.id]=c;return enCfgSet({sem},msg)}
+const enReqCustom=r=>!REQ_DEF.some(d=>d.k===r.k);
+const enReqLinha=(r,on,extra)=>`<div class="req-l"><label class="chk"><input type="checkbox" ${extra}${on?' checked':''}> <span>${esc(r.l)}<span class="crumb"> · ${r.auto?'automático':'manual'}${r.ref?' · '+esc(r.ref):''}${r.esc==='se'?' · SE inteira':''}${r.cd?' · '+esc(r.cd):''}</span></span></label>`;
+function openEnReqCfg(){pushSheet({live:true,title:'Requisitos do semáforo',render:()=>{const c=cfgApp(),off=c.reqOff||[],toff=c.termOff||[];
+  return `<p class="hint" style="margin:0">Cada marcação vale na hora para todas as FTs. Desmarcado, o requisito sai do semáforo mas continua aqui para religar quando quiser. Para mudar só uma FT, abra a FT no semáforo e toque em <b>Requisitos desta FT</b>.</p>
+    <div class="sec-t">Termos controlados</div><div class="req-terms">${TERMOS.map(t=>`<label class="chk"><input type="checkbox" data-enterm="${t}"${toff.includes(t)?'':' checked'}> <span>${t}</span></label>`).join('')}</div>
+    <p class="crumb" style="margin:4px 0 0">Termo desmarcado sai do semáforo; os requisitos dele passam para o termo seguinte marcado (o Anexo C é cumulativo).</p>
+    <div class="actions"><button class="btn sm" data-act="en-reqpre" data-v="com">Só os do comissionamento</button><button class="btn sm" data-act="en-reqpre" data-v="todos">Ligar todos</button><button class="btn sm" data-act="en-reqpre" data-v="nenhum">Desligar todos</button><button class="btn sm primary" data-act="en-reqed" data-k="">+ Novo requisito</button></div>
+    ${TERMOS.map(t=>{const l=enReqsAll().filter(r=>r.t===t);return l.length?`<div class="sec-t">Requisitos ${t} <span class="crumb">${l.filter(r=>!off.includes(r.k)).length} de ${l.length} ligados</span></div><div class="req-sel">${l.map(r=>enReqLinha(r,!off.includes(r.k),`data-enreq="${esc(r.k)}"`)+`<span class="req-ac"><button class="linkb" data-act="en-reqed" data-k="${esc(r.k)}">editar</button>${enReqCustom(r)?` · <button class="linkb" data-act="en-reqdel" data-k="${esc(r.k)}">excluir</button>`:''}</span></div>`).join('')}</div>`:''}).join('')}
+    <label class="fld" style="margin-top:12px">Antecedência mínima para pedir SI (dias)<input id="enSiAnt" inputmode="numeric" value="${esc(c.siAntec||'')}"></label>
+    <div class="actions"><button class="btn sm" data-act="en-reqdef">Restaurar os textos do padrão</button></div><p class="crumb">Restaurar volta a redação e os termos dos requisitos padrão (Submódulo 7.15, rev. 2025.08). Não mexe no que está ligado ou desligado nem nos requisitos que você incluiu.</p>`}})}
+function enReqPreset(v){const all=enReqsAll().map(r=>r.k);const reqOff=v==='todos'?[]:v==='nenhum'?all:all.filter(k=>!REQ_COMISS.includes(k)&&!enReqCustom({k}));
+  return enCfgSet({reqOff},v==='com'?'Só os requisitos do comissionamento ligados':v==='todos'?'Todos os requisitos ligados':'Todos os requisitos desligados')}
+function openEnReqEd(k){const r=k?enReqsAll().find(x=>x.k===k):null;pushSheet({title:r?'Editar requisito':'Novo requisito',render:()=>`<form class="form" data-form="en-reqed" data-k="${esc(k||'')}">
+    ${r&&r.auto?'<p class="hint" style="margin:0">Requisito automático: o app calcula a situação; aqui muda só o texto e o termo.</p>':''}
+    <label>Texto<input name="l" required maxlength="160" value="${esc(r?r.l:'')}"></label>
+    <div class="grid2"><label>Termo<select name="t">${TERMOS.map(t=>`<option${(r?r.t:'TLT')===t?' selected':''}>${t}</option>`).join('')}</select></label><label>Referência<input name="ref" maxlength="80" value="${esc(r?r.ref||'':'')}" placeholder="Ex.: Anexo C·22 · Subm. 7.9"></label></div>
+    <label class="chk"><input type="checkbox" name="se"${r&&r.esc==='se'?' checked':''}> <span>Vale para a SE inteira (marcado uma vez para todas as FTs)</span></label>
+    <label>Condição de aplicabilidade (opcional)<input name="cd" maxlength="160" value="${esc(r?r.cd||'':'')}"></label>
+    <p class="ferr" id="enErr"></p><div class="actions"><button class="btn primary" type="submit">Salvar</button></div></form>`})}
+async function enReqEdSalva(f){const fd=new FormData(f),k=f.dataset.k,g=n=>String(fd.get(n)||'').trim();if(!g('l')){$('#enErr').textContent='Escreva o texto.';return}
+  const l=enReqsAll().map(r=>({...r})),o={l:g('l'),t:g('t'),ref:g('ref'),esc:fd.get('se')?'se':'',cd:g('cd')};
+  if(k){const r=l.find(x=>x.k===k);Object.assign(r,o);if(r.auto)r.esc='';}else l.push({k:'m'+Date.now().toString(36),...o});
+  try{await S.db.doc('config/app').set({...cfgApp(),reqs:l,reqVer:REQ_VER});toast(k?'Requisito alterado':'Requisito incluído');backSheet()}catch(e){$('#enErr').textContent=errMsg(e)}}
+function enReqDel(k){const c=cfgApp();return enCfgSet({reqs:enReqsAll().filter(r=>r.k!==k),reqOff:(c.reqOff||[]).filter(x=>x!==k)},'Requisito excluído')}
+function enReqRestaura(){const cu=enReqsAll().filter(enReqCustom);return enCfgSet({reqs:[...REQ_DEF,...cu],reqVer:REQ_VER},'Textos do padrão restaurados')}
+/* requisitos de uma FT */
+function openEnReqFT(lk){pushSheet({live:true,title:()=>{const se=effSE(),ft=se&&enFTsAll(se).find(f=>f.lk===lk);return 'Requisitos · '+(ft?ft.nome:'FT')},render:()=>{const se=effSE(),ft=enFTsAll(se).find(f=>f.lk===lk);if(!ft)return '';
+  const gOff=cfgApp().reqOff||[],o=(enSemCfg(se).reqFt||{})[lk]||{},vale=enReqsFT(se,ft).map(r=>r.k),dif=(o.on||[]).length+(o.off||[]).length;
+  return `<p class="hint" style="margin:0">Marque o que vale nesta FT. O padrão geral vem de <b>Requisitos do semáforo</b>; o que você mudar aqui fica só nesta FT${dif?` (${dif} diferença(s) do padrão)`:''}.</p>
+    ${dif?`<div class="actions"><button class="btn sm" data-act="en-reqftpad" data-lk="${esc(lk)}">Voltar ao padrão geral</button></div>`:''}
+    ${enTermos().map(t=>{const l=enReqsAll().filter(r=>enTermoDe(r)===t);return l.length?`<div class="sec-t">Requisitos ${t}</div><div class="req-sel">${l.map(r=>{const on=vale.includes(r.k),pad=!gOff.includes(r.k);return enReqLinha(r,on,`data-enreqft="${esc(r.k)}" data-lk="${esc(lk)}"`)+`${on!==pad?`<span class="req-ac crumb">${on?'ligado só nesta FT':'desligado nesta FT'}</span>`:''}</div>`}).join('')}</div>`:''}).join('')}`}})}
+function enReqFTMarca(lk,k,on){const se=effSE();return enSemSet(se,c=>{c.reqFt=c.reqFt||{};const o=c.reqFt[lk]||{on:[],off:[]},pad=!(cfgApp().reqOff||[]).includes(k);
+  o.on=(o.on||[]).filter(x=>x!==k);o.off=(o.off||[]).filter(x=>x!==k);if(on&&!pad)o.on.push(k);if(!on&&pad)o.off.push(k);if(o.on.length||o.off.length)c.reqFt[lk]=o;else delete c.reqFt[lk]})}
+/* FTs monitoradas */
+const FT_TIPOS=[['ftb','Barramento'],['ftlrb','LT — Rede Básica'],['ftldit','LT — DIT'],['ftt','Transformador'],['ftr','Reator'],['ftx','Outra']];
+function openEnFtCfg(){pushSheet({live:true,title:'FTs monitoradas',render:()=>{const se=effSE();if(!se)return '';const c=enSemCfg(se),off=c.ftOff||[],all=enFTsAll(se);
+  return `<p class="hint" style="margin:0">Marque as FTs que o semáforo, a supervisão e as SIs/PEX acompanham nesta SE. As do unifilar aparecem sozinhas; desmarcadas, saem do controle (os registros continuam guardados). Inclua FTs que não estão no unifilar, se precisar.</p>
+    <div class="actions"><button class="btn sm" data-act="en-ftall" data-v="1">Marcar todas</button><button class="btn sm" data-act="en-ftall" data-v="0">Desmarcar todas</button></div>
+    <div class="req-sel">${all.map(f=>`<div class="req-l"><label class="chk"><input type="checkbox" data-enft="${esc(f.lk)}"${off.includes(f.lk)?'':' checked'}> <span>${esc(f.nome)}<span class="crumb"> · ${esc((FT_TIPOS.find(x=>x[0]===f.m)||[])[1]||ensNome(f.m))}${f.extra?' · incluída à mão':''}</span></span></label>${f.extra?`<span class="req-ac"><button class="linkb" data-act="en-ftdel" data-lk="${esc(f.lk)}">excluir</button></span>`:''}</div>`).join('')||'<p class="muted">Nenhuma FT no unifilar.</p>'}</div>
+    <form class="form" data-form="en-ftnova" style="margin-top:12px"><div class="sec-t" style="margin:0">Incluir FT</div><div class="grid2"><label>Nome<input name="nome" required maxlength="80" placeholder="Ex.: LT 230 kV C3 (futura)"></label><label>Tipo<select name="m">${FT_TIPOS.map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></label></div><div class="actions"><button class="btn primary" type="submit">Incluir</button></div></form>`}})}
 function openEnPapeis(){pushSheet({live:true,title:'Quem cadastra SI e aprova PEX',render:()=>`<p class="hint">O administrador sempre pode. Marque quem mais cadastra as SIs no SGI e atualiza a situação, e quem aprova PEX. Também é possível indicar o aprovador em cada PEX.</p>
   <div class="tscroll"><table class="olds"><thead><tr><th>Usuário</th><th>Cadastra SI</th><th>Aprova PEX</th></tr></thead><tbody>${S.users.filter(u=>u.tipo==='interno'||u.tipo==='externo').map(u=>`<tr><td>${esc(u.nome)} <span class="crumb">${ROLES[u.tipo]}</span></td><td><input type="checkbox" data-enpapel="siCad" data-id="${esc(u.id)}"${u.siCad?' checked':''} aria-label="${esc(u.nome)} cadastra SI"></td><td><input type="checkbox" data-enpapel="pexAp" data-id="${esc(u.id)}"${u.pexAp?' checked':''} aria-label="${esc(u.nome)} aprova PEX"></td></tr>`).join('')}</tbody></table></div>`})}
 function openEnPexCfg(){pushSheet({title:'Numeração da PEX',render:()=>`<form class="form" data-form="en-pexcfg"><p class="hint" style="margin:0">Padrão Neoenergia: <b>PEX-{REG}-SE-{SIGLA}-{NNNN}</b>, onde {REG} é a regional, {SIGLA} a sigla da SE e {NNNN} o sequencial (ex.: PEX-NNE-SE-GID-0002). Também aceita {AAAA} (ano) e {NNN}. O app sugere o próximo número; quem sobe a PEX pode trocar.</p>
@@ -2872,26 +2945,32 @@ document.addEventListener('change',e=>{const t=e.target;if(!t||!t.dataset)return
   if(t.dataset.en){const lk=(S.stack[S.stack.length-1]||{}).enlk;if(!lk)return;const v=t.type==='number'||t.classList.contains('en-n')?(t.value===''?'':+t.value):t.value;enSupGrava(lk,t.dataset.en,v)}
   else if(t.id==='enSif'){EN.sif=t.value;renderView()}
   else if(t.dataset.enpt&&EN.imp){EN.imp.map[t.dataset.enpt]=t.value||null;refreshLiveSheet()}
+  else if(t.dataset.enptg&&EN.imp){EN.imp.dest=EN.imp.dest||{};EN.imp.dest[t.dataset.enptg]=t.value;refreshLiveSheet()}
   else if(t.id==='enPtArq'){const f=t.files&&t.files[0];t.value='';if(!f)return;(async()=>{try{const abas=/\.xlsx$/i.test(f.name)?await enLerXlsxTodas(f):[{nome:f.name,rows:abLerTexto(await f.text())}];EN.imp.nome=f.name;enPtCarrega(abas)}catch(x){const er=$('#enErr');if(er)er.textContent='Não consegui ler esse arquivo. Salve como .xlsx ou .csv, ou copie e cole.'}})()}
   else if(t.id==='enPtT'){EN.ptt=t.value;refreshLiveSheet()}
   else if(t.dataset.enpx&&EN.pxi){EN.pxi.map[t.dataset.enpx]=+t.value;refreshLiveSheet()}else if(t.id==='enPxDef'&&EN.pxi){EN.pxi.def=t.value;refreshLiveSheet()}else if(t.id==='enPxAtual'&&EN.pxi){EN.pxi.atual=t.checked;refreshLiveSheet()}
   else if(t.id==='enPxF'){EN.pxf=t.value;renderView()}else if(t.id==='enSvF'){EN.svf=t.value;renderView()}
   else if(t.id==='enPxArq'){const f=t.files&&t.files[0];t.value='';if(!f)return;(async()=>{try{const rows=/\.xlsx$/i.test(f.name)?await abLerXlsx(f):abLerTexto(await f.text());enPxCarrega(rows,f.name)}catch(x){const er=$('#enErr');if(er)er.textContent='Não consegui ler esse arquivo. Salve como .xlsx ou .csv, ou copie e cole.'}})()}else if(t.id==='enPtF'){EN.ptf=t.value;refreshLiveSheet()}
+  else if(t.dataset.enreq&&R.owner()){const k=t.dataset.enreq,off=(cfgApp().reqOff||[]).filter(x=>x!==k);if(!t.checked)off.push(k);enCfgSet({reqOff:off},t.checked?'Requisito ligado':'Requisito desligado')}
+  else if(t.dataset.enterm&&R.owner()){const tm=TERMOS.filter(x=>x===t.dataset.enterm?t.checked:!(cfgApp().termOff||[]).includes(x));if(!tm.length){t.checked=true;toast('Deixe ao menos um termo marcado');return}enCfgSet({termOff:TERMOS.filter(x=>!tm.includes(x))},'Termos: '+tm.join(', '))}
+  else if(t.id==='enSiAnt'&&R.owner()){enCfgSet({siAntec:+t.value||0},'Antecedência salva')}
+  else if(t.dataset.enreqft&&R.owner()){enReqFTMarca(t.dataset.lk,t.dataset.enreqft,t.checked)}
+  else if(t.dataset.enft&&R.owner()){const lk=t.dataset.enft;enSemSet(effSE(),c=>{c.ftOff=(c.ftOff||[]).filter(x=>x!==lk);if(!t.checked)c.ftOff.push(lk)},t.checked?'FT monitorada':'FT fora do controle')}
   else if(t.dataset.enpapel&&R.owner()){dbDo(()=>S.db.doc('usuarios/'+t.dataset.id).update({[t.dataset.enpapel]:t.checked}),'Permissão atualizada')}
   else if(t.dataset.pexap&&R.owner()){dbDo(()=>S.db.doc('energ/'+t.dataset.pexap).update({aprovador:t.value||null}),'Aprovador indicado')}
   else if(t.dataset.pexrev){const f=t.files&&t.files[0];const id=t.dataset.pexrev;t.value='';if(f)enPexRev(id,f)}});
 document.addEventListener('input',e=>{const t=e.target;if(t&&t.id==='enPtQ'){EN.ptq=t.value;clearTimeout(EN.tq);EN.tq=setTimeout(refreshLiveSheet,150)}
   else if(t&&t.id==='enPxQ'){EN.pxq=t.value;clearTimeout(EN.tq);EN.tq=setTimeout(()=>{const p=t.selectionStart;renderView();const n=$('#enPxQ');if(n){n.focus();try{n.setSelectionRange(p,p)}catch(x){}}},150)}});
 document.addEventListener('submit',e=>{const f=e.target;if(!f||!f.dataset)return;const k=f.dataset.form;if(!/^en-/.test(k||''))return;e.preventDefault();e.stopImmediatePropagation();
-  if(k==='en-si')enSISalva(f);else if(k==='en-decl')enDeclSalva(f);else if(k==='en-pex')enPexSalva(f);else if(k==='en-reqcfg'&&R.owner())enReqCfgSalva(f);else if(k==='en-reqsel'&&R.owner())enReqSelSalva(f);
+  if(k==='en-si')enSISalva(f);else if(k==='en-decl')enDeclSalva(f);else if(k==='en-pex')enPexSalva(f);else if(k==='en-reqed'&&R.owner())enReqEdSalva(f);else if(k==='en-ftnova'&&R.owner()){const fd=new FormData(f),nome=String(fd.get('nome')||'').trim();if(!nome)return;const lk='ftx|'+Date.now().toString(36);enSemSet(effSE(),c=>{c.ftExtra=[...(c.ftExtra||[]),{lk,nome,m:String(fd.get('m')||'ftx'),grp:'Incluídas'}]},'FT incluída').then(()=>f.reset())}
   else if(k==='en-pexcfg'&&R.owner()){const fd=new FormData(f),p=String(fd.get('p')||'').trim();if(!/\{NNNN?\}/.test(p)){$('#enErr').textContent='Inclua {NNNN} ou {NNN} no padrão.';return}const reg={};S.ses.forEach(se=>{const v=String(fd.get('reg_'+se.id)||'').trim().toUpperCase();if(v)reg[se.id]=v});dbDo(async()=>{await S.db.doc('config/app').set({...cfgApp(),pexPadrao:p,regionais:reg});backSheet()},'Numeração salva')}
   else if(k==='en-bdprot'){const se=effSE(),lk=f.dataset.lk,fd=new FormData(f);(async()=>{try{const rq=enReq(se.id,lk),an=await enArquivo(f.querySelector('#enBDArq')?.files?.[0],enPasta(se,'BDProt'));
     const b={oa:String(fd.get('oa')||'').trim(),data:String(fd.get('data')||''),obs:String(fd.get('obs')||'').trim(),por:S.me?.id||null,em:Date.now(),anexo:an||(rq&&rq.bdprot&&rq.bdprot.anexo)||null};
     {const o={...(rq||{}),tipo:'req',se:se.id,k:lk,it:(rq&&rq.it)||{},bdprot:b};delete o.id;await S.db.doc('energ/R.'+se.id+'.'+enSlug(lk)).set(o)}toast('Registro no BDProt salvo');backSheet()}catch(x){$('#enErr').textContent=errMsg(x)}})()}},true);
 
-async function enPtPend(lk,et){const se=effSE(),pts=enPontos(se.id,lk)||[],s=enSup(se.id,lk),f=((s&&s.et[et])||{}).fita||'',nok=pts.filter((p,i)=>f[i]==='X'),ft=enFTs(se).find(x=>x.lk===lk)||{},info=locInfo(se,lk);
+async function enPtPend(lk,et){const se=effSE(),pts=enPontos(se.id,lk)||[],s=enSup(se.id,lk),f=((s&&s.et[et])||{}).fita||'',nok=pts.filter((p,i)=>f[i]==='X'),ft=enSupAlvos(se).find(x=>x.lk===lk)||{},info=/^grp\|/.test(lk)?null:locInfo(se,lk);
   if(!nok.length)return;const ref=S.db.collection('pendencias').doc(),et_=(ETS.find(x=>x[0]===et)||[])[1];
-  try{await ref.set({se:se.id,seNome:se.nome,seSigla:se.sigla||'',lk,locLabel:info?.label||ft.nome||'',titulo:`Supervisão ${et_}: ${nok.length} ponto(s) NOK`,descricao:nok.map(p=>`${p[0]} — ${p[1]}`).join('\n').slice(0,3000),prioridade:'media',categoria:'Supervisão',prazo:'',responsavel:'',status:'aberta',fotos:[],fotosSol:[],obsSol:'',criadoPor:S.me?.id||null,criadoEm:Date.now(),sanadoPor:null,sanadoEm:null,atualizadoEm:Date.now()});toast('Pendência criada com os pontos NOK')}catch(e){toast(errMsg(e))}}
+  try{await ref.set({se:se.id,seNome:se.nome,seSigla:se.sigla||'',lk:/^grp\|/.test(lk)?'':lk,locLabel:info?.label||ft.nome||'',titulo:`Supervisão ${et_}: ${nok.length} ponto(s) NOK`,descricao:nok.map(p=>`${p[0]} — ${p[1]}`).join('\n').slice(0,3000),prioridade:'media',categoria:'Supervisão',prazo:'',responsavel:'',status:'aberta',fotos:[],fotosSol:[],obsSol:'',criadoPor:S.me?.id||null,criadoEm:Date.now(),sanadoPor:null,sanadoEm:null,atualizadoEm:Date.now()});toast('Pendência criada com os pontos NOK')}catch(e){toast(errMsg(e))}}
 /* ================= fotos ================= */
 function clearDraft(){if(S.draft)S.draft.items.forEach(i=>URL.revokeObjectURL(i.url));S.draft=null}
 function newDraft(){clearDraft();S.draft={items:[]}}
@@ -3236,13 +3315,15 @@ Object.assign(ACT,{
   'en-ft':b=>openEnFT(b.dataset.lk),
   'en-sup':b=>openEnSup(b.dataset.lk),
   'en-reqcfg':()=>{if(R.owner())openEnReqCfg()},
-  'en-reqdef':b=>{if(R.owner())arm(b,'Confirmar: voltar ao padrão',()=>dbDo(async()=>{const c={...cfgApp()};delete c.reqs;await S.db.doc('config/app').set(c);backSheet()},'Requisitos padrão restaurados'))},
+  'en-reqdef':b=>{if(R.owner())arm(b,'Confirmar: restaurar textos',()=>enReqRestaura())},
   'en-papeis':()=>{if(R.owner())openEnPapeis()},
   'en-req':b=>enReqMarca(b),
   'en-bdprot':b=>{if(R.canAct())openBDProt(b.dataset.lk)},
   'en-ptimp':b=>openEnPtImp(b.dataset.lk),
   'en-ptcola':()=>{const t=$('#enPtCola');EN.imp.nome='Texto colado';enPtCarrega([{nome:'Texto colado',rows:abLerTexto(t?t.value:'')}])},
   'en-ptgrava':b=>enPtGrava(b),
+  'en-ptgravase':b=>enPtGravaSE(b),
+  'en-ptimpse':()=>openEnPtImp('*'),
   'en-pts':b=>openEnPts(b.dataset.lk,b.dataset.et),
   'en-pt':b=>{if(R.canAct())enPtMarca([+b.dataset.i],b.dataset.v)},
   'en-ptlote':b=>{if(R.canAct()&&EN.vis&&EN.vis.length)arm(b,'Confirmar ('+EN.vis.length+')',()=>enPtMarca(EN.vis.slice(),b.dataset.v))},
@@ -3266,8 +3347,14 @@ Object.assign(ACT,{
   'en-pxcola':()=>{const t=$('#enPxCola');enPxCarrega(abLerTexto(t?t.value:''),'Texto colado')},
   'en-pxgrava':b=>enPxGrava(b),
   'en-pxvolta':()=>{EN.pxi={rows:null,def:'aprovada',atual:true};refreshLiveSheet()},
-  'en-reqpre':b=>{if(R.owner())enReqPreset(b.dataset.v)},
-  'en-reqtxt':()=>{if(R.owner())openEnReqTxt()},
+  'en-reqpre':b=>{if(R.owner())arm(b,'Confirmar',()=>enReqPreset(b.dataset.v))},
+  'en-reqed':b=>{if(R.owner())openEnReqEd(b.dataset.k)},
+  'en-reqdel':b=>{if(R.owner())arm(b,'Confirmar exclusão',()=>enReqDel(b.dataset.k))},
+  'en-reqft':b=>{if(R.owner())openEnReqFT(b.dataset.lk)},
+  'en-reqftpad':b=>{if(R.owner())arm(b,'Confirmar',()=>enSemSet(effSE(),c=>{if(c.reqFt)delete c.reqFt[b.dataset.lk]},'FT segue o padrão geral'))},
+  'en-ftcfg':()=>{if(R.owner())openEnFtCfg()},
+  'en-ftall':b=>{if(R.owner()){const se=effSE(),all=enFTsAll(se).map(f=>f.lk);enSemSet(se,c=>{c.ftOff=b.dataset.v==='1'?[]:all},b.dataset.v==='1'?'Todas as FTs monitoradas':'Nenhuma FT monitorada')}},
+  'en-ftdel':b=>{if(R.owner())arm(b,'Confirmar exclusão',()=>enSemSet(effSE(),c=>{c.ftExtra=(c.ftExtra||[]).filter(f=>f.lk!==b.dataset.lk);c.ftOff=(c.ftOff||[]).filter(x=>x!==b.dataset.lk)},'FT excluída'))},
   'oem-eq':b=>openOemEq(b.dataset.lk,b.dataset.m),
   'oem-f':b=>{OEM.f=b.dataset.f;renderView()},
   'oem-nova':b=>{if(R.canAct())oemNova(b.dataset.lk,b.dataset.m)},
